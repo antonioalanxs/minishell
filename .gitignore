@@ -5,7 +5,8 @@
 **/*.so
 **/*.dll
 **/*.exe
-**/*
+minishell
+test
 
 # Ignore the .devcontainer folder
 **/.devcontainer/
@@ -19,3 +20,6 @@
 **/*~
 **/*.swp
 **/*.bak
+
+# Ignore Visual Studio Code
+**/.vscode/
