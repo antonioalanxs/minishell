@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <signal.h>
 
 #include "parser.h"
 
@@ -20,51 +21,45 @@
 #define PROMPT "msh> "
 
 /**
- * Error result for fork operation.
- */
-#define FORK_ERROR -1
-
-/**
  * Result code for the child process in a fork operation.
  */
-#define FORK_CHILD 0
-
-/**
- * Argument to the `exit()` function to indicate that the program has executed
- * successfully without errors.
- */
-#define EXIT_SUCCESS 0
+#define CHILD 0
 
 /**
  * Argument to the `exit()` function to indicate that the program encountered
  * an error or failure during execution signaling to the operating system that
  * an issue occurred.
  */
-#define EXIT_FAILURE 1
+#define FAILURE 1
 
 /**
- * Mode for opening a file when reading. This mode is used in `fopen()` to
- * specify read-only access to the file.
+ * Pipe in file descriptors array.
  */
-#define READ "r"
+#define PIPE 2
 
 /**
- * Mode for opening a file when writing. This mode is used in `fopen()` to
- * specify write-only access to the file.
+ * Read end of a pipe.
  */
-#define WRITE "w"
+#define READ 0
+
+/**
+ * Write end of a pipe.
+ */
+#define WRITE 1
 
 void redirect(const char *filename, const char *MODE, FILE *file, int *fd, const int STD_FILENO, int *stdfd);
 
-void restore(int *stdfd, const int STD_FILENO, int fd);
+void restore(int *stdfd, const int STD_FILENO, const int fd);
 
 int main(void)
 {
     char buffer[MAXIMUM_LINE_LENGTH];
 
     tline *line;
-    int isEmpty, isInputRedirected, isOutputRedirected, isErrorRedirected;
+    int isInputRedirected, isOutputRedirected, isErrorRedirected;
     char *filename;
+    int commands;
+    int hasMultipleCommands;
 
     int stderrfd, stdinfd, stdoutfd;
     FILE errorFile, inputFile, outputFile;
@@ -75,14 +70,14 @@ int main(void)
     char **arguments;
     char *command;
 
+    int p[PIPE];
+
     printf(PROMPT);
     while (fgets(buffer, MAXIMUM_LINE_LENGTH, stdin))
     {
         line = tokenize(buffer);
 
-        isEmpty = line == NULL;
-
-        if (isEmpty)
+        if (line == NULL)
         {
             continue;
         }
@@ -94,40 +89,74 @@ int main(void)
         if (isErrorRedirected)
         {
             filename = line->redirect_error;
-            redirect(filename, WRITE, &errorFile, &errfd, STDERR_FILENO, &stderrfd);
+            redirect(filename, "w", &errorFile, &errfd, STDERR_FILENO, &stderrfd);
         }
 
         if (isInputRedirected)
         {
             filename = line->redirect_input;
-            redirect(filename, READ, &inputFile, &infd, STDIN_FILENO, &stdinfd);
+            redirect(filename, "r", &inputFile, &infd, STDIN_FILENO, &stdinfd);
         }
 
         if (isOutputRedirected)
         {
             filename = line->redirect_output;
-            redirect(filename, WRITE, &outputFile, &outfd, STDOUT_FILENO, &stdoutfd);
+            redirect(filename, "w", &outputFile, &outfd, STDOUT_FILENO, &stdoutfd);
         }
+
+        pipe(p);
+
+        commands = line->ncommands;
+
+        hasMultipleCommands = commands > 1;
 
         pid = fork();
 
-        if (pid == FORK_ERROR)
+        if (pid == CHILD)
         {
-            fprintf(stderr, "%s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-        else if (pid == FORK_CHILD)
-        {
+            close(p[READ]);
+
+            if (hasMultipleCommands)
+            {
+                dup2(p[WRITE], STDOUT_FILENO);
+                close(p[WRITE]);
+            }
+
             arguments = line->commands[0].argv;
             command = arguments[0];
 
             execvp(command, arguments);
 
             fprintf(stderr, "%s: Command not found\n", command);
-            exit(EXIT_FAILURE);
+            exit(FAILURE);
         }
         else
         {
+            close(p[WRITE]);
+
+            if (hasMultipleCommands)
+            {
+                pid = fork();
+
+                if (pid == CHILD)
+                {
+                    dup2(p[READ], STDIN_FILENO);
+                    close(p[READ]);
+
+                    arguments = line->commands[1].argv;
+                    command = arguments[0];
+
+                    execvp(command, arguments);
+
+                    fprintf(stderr, "%s: Command not found\n", command);
+                    exit(FAILURE);
+                }
+                else
+                {
+                    wait(NULL);
+                }
+            }
+
             wait(NULL);
         }
 
@@ -155,12 +184,12 @@ int main(void)
 /**
  * Redirect a file to a specified file descriptor.
  *
- * Open a file with the given filename and mode, and redirect it to the 
+ * Open a file with the given filename and mode, and redirect it to the
  * specified file descriptor using the `dup2()` system call. It also saves the
  * current file descriptor of `STD_FILENO` for later restoration.
  *
  * @param filename    The name of the file to be opened and redirected.
- * @param MODE        The mode for opening the file ("r" for read, "w" for
+ * @param MODE        The mode for opening the file (`"r"` for read, `"w"` for
  *                    write).
  * @param file        A pointer to a `FILE` structure that will store the opened
  *                    file.
@@ -180,7 +209,7 @@ void redirect(const char *filename, const char *MODE, FILE *file, int *fd, const
     if (file == NULL)
     {
         fprintf(stderr, "%s: Error. %s\n", filename, strerror(errno));
-        exit(EXIT_FAILURE);
+        exit(FAILURE);
     }
     *fd = fileno(file);
 
@@ -192,17 +221,16 @@ void redirect(const char *filename, const char *MODE, FILE *file, int *fd, const
  * Restore the original file descriptor of `STD_FILENO` and closes the file.
  *
  * Restore the original file descriptor of `STD_FILENO` that was saved during
- * redirection using the `redirect()` function. It also closes the file 
+ * redirection using the `redirect()` function. It also closes the file
  * associated with the given `FILE` pointer.
  *
  * @param stdfd       A pointer to the original file descriptor of `STD_FILENO`
  *                    saved during redirection.
  * @param STD_FILENO  The file descriptor representing standard input/output
  *                    (e.g., `STDIN_FILENO`).
- * @param file        A pointer to a `FILE` structure that represents the opened
- *                    file during redirection.
+ * @param fd          The file descriptor of the opened file during redirection.
  */
-void restore(int *stdfd, const int STD_FILENO, int fd)
+void restore(int *stdfd, const int STD_FILENO, const int fd)
 {
     dup2(*stdfd, STD_FILENO);
     close(fd);
