@@ -59,7 +59,7 @@
  */
 #define PIPE_WRITE 1
 
-void init(int *stdinfd, int *stdoutfd, int *stderrfd);
+void store(int *stdinfd, int *stdoutfd, int *stderrfd);
 void redirect(tline *line);
 void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO);
 void executeCommand(const tline *line, int number);
@@ -83,7 +83,7 @@ int main(void)
             continue;
         }
 
-        init(&stdinfd, &stdoutfd, &stderrfd);
+        store(&stdinfd, &stdoutfd, &stderrfd);
 
         pipe(p);
 
@@ -150,7 +150,7 @@ int main(void)
  * @param stderrfd Pointer to the variable to store the original standard error
  * file descriptor.
  */
-void init(int *stdinfd, int *stdoutfd, int *stderrfd)
+void store(int *stdinfd, int *stdoutfd, int *stderrfd)
 {
     dup2(STDERR_FILENO, *stderrfd);
     dup2(STDIN_FILENO, *stdinfd);
@@ -161,7 +161,7 @@ void init(int *stdinfd, int *stdoutfd, int *stderrfd)
  * Redirect standard input, output, and error based on the information provided
  * in the given command line structure.
  *
- * @param line A pointer to a tline structure representing the command line.
+ * @param line A pointer to a `tline` structure representing the command line.
  * @param stdinfd Pointer to the variable to store the original standard input
  * file descriptor.
  * @param stdoutfd Pointer to the variable to store the original standard
@@ -220,7 +220,7 @@ void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO)
 /**
  * Execute a command specified by the given command line structure.
  *
- * @param line A pointer to a tline structure representing the command line.
+ * @param line A pointer to a `tline` structure representing the command line.
  * @param number The index of the command to be executed within the command
  * line.
  *
