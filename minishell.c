@@ -74,8 +74,6 @@ int main(void)
     int p[PIPE];
     int _;
 
-    pipe(p);
-
     printf(PROMPT);
     while (fgets(buffer, MAXIMUM_LINE_LENGTH, stdin))
     {
@@ -89,6 +87,8 @@ int main(void)
         init(&stdinfd, &stdoutfd, &stderrfd);
 
         redirect(line);
+
+        pipe(p);
 
         pid = fork();
 
