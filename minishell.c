@@ -72,7 +72,6 @@ int main(void)
     int stdinfd, stdoutfd, stderrfd;
     pid_t pid;
     int p[PIPE];
-    int _;
 
     printf(PROMPT);
     while (fgets(buffer, MAXIMUM_LINE_LENGTH, stdin))
@@ -86,14 +85,14 @@ int main(void)
 
         init(&stdinfd, &stdoutfd, &stderrfd);
 
-        redirect(line);
-
         pipe(p);
 
         pid = fork();
 
         if (pid == FORK_CHILD)
         {
+            redirect(line);
+
             close(p[PIPE_READ]);
 
             if (line->ncommands > 1)
@@ -108,26 +107,31 @@ int main(void)
         {
             close(p[PIPE_WRITE]);
 
+            wait(NULL);
+
+            restore(stdinfd, stdoutfd, stderrfd);
+
             if (line->ncommands > 1)
             {
                 pid = fork();
 
                 if (pid == FORK_CHILD)
                 {
+                    redirect(line);
+
                     dup2(p[PIPE_READ], STDIN_FILENO);
                     close(p[PIPE_READ]);
 
                     executeCommand(line, 1);
                 }
-            }
+                else
+                {
+                    wait(NULL);
 
-            for (_ = 0; _ < line->ncommands; _++)
-            {
-                wait(NULL);
+                    restore(stdinfd, stdoutfd, stderrfd);
+                }
             }
         }
-
-        restore(stdinfd, stdoutfd, stderrfd);
 
         printf(PROMPT);
     }
@@ -209,6 +213,7 @@ void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO)
 
     dup2(fd, STD_FILENO);
 
+    fclose(file);
     close(fd);
 }
 
