@@ -71,7 +71,8 @@ int main(void)
     tline *line;
     int stdinfd, stdoutfd, stderrfd;
     pid_t pid;
-    int p[PIPE];
+    int p[PIPE], p2[PIPE];
+    int command;
 
     printf(PROMPT);
     while (fgets(buffer, MAXIMUM_LINE_LENGTH, stdin))
@@ -111,26 +112,76 @@ int main(void)
 
             restore(stdinfd, stdoutfd, stderrfd);
 
-            if (line->ncommands > 1)
+            for (command = 1; command < line->ncommands; command++)
             {
+                if (command % 2 == 0)
+                {
+                    pipe(p);
+                }
+                else
+                {
+                    pipe(p2);
+                }
+
                 pid = fork();
 
                 if (pid == FORK_CHILD)
                 {
                     redirect(line);
 
-                    dup2(p[PIPE_READ], STDIN_FILENO);
+                    if (command % 2 == 0)
+                    {
+                        dup2(p2[PIPE_READ], STDIN_FILENO);
+                        if (command != line->ncommands - 1)
+                        {
+                            dup2(p[PIPE_WRITE], STDOUT_FILENO);
+                        }
+                    }
+                    else
+                    {
+                        dup2(p[PIPE_READ], STDIN_FILENO);
+                        if (command != line->ncommands - 1)
+                        {
+                            dup2(p2[PIPE_WRITE], STDOUT_FILENO);
+                        }
+                    }
                     close(p[PIPE_READ]);
+                    close(p[PIPE_WRITE]);
+                    close(p2[PIPE_READ]);
+                    close(p2[PIPE_WRITE]);
 
                     executeCommand(line, 1);
                 }
                 else
                 {
-                    wait(NULL);
+                    if (command % 2 == 0)
+                    {
+                        dup2(STDIN_FILENO, p[PIPE_WRITE]);
+                        close(p[PIPE_WRITE]);
+                        close(p2[PIPE_READ]);
+                        if (command == line->ncommands - 1)
+                        {
+                            close(p[PIPE_READ]);
+                            close(p2[PIPE_WRITE]);
+                        }
+                    }
+                    else
+                    {
+                        dup2(STDIN_FILENO, p2[PIPE_WRITE]);
+                        close(p2[PIPE_WRITE]);
+                        close(p[PIPE_READ]);
+                        if (command == line->ncommands - 1)
+                        {
+                            close(p2[PIPE_READ]);
+                            close(p[PIPE_WRITE]);
+                        }
+                    }
 
-                    restore(stdinfd, stdoutfd, stderrfd);
+                    wait(NULL);
                 }
             }
+
+            restore(stdinfd, stdoutfd, stderrfd);
         }
 
         printf(PROMPT);
