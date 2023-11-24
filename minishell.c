@@ -80,7 +80,8 @@ void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO);
 void run(const tline *line, int number);
 void restore(const int stdinfd, const int stdoutfd, const int stderrfd);
 void executeExternalCommands(tline *line);
-void cd(char *directory);
+void mshcd(char *directory);
+void mshexit(int commands);
 
 int main(void)
 {
@@ -102,7 +103,11 @@ int main(void)
 
         if (strcmp(firstCommandArguments[COMMAND], "cd") == 0)
         {
-            cd(firstCommandArguments[DIRECTORY]);
+            mshcd(firstCommandArguments[DIRECTORY]);
+        }
+        else if (strcmp(firstCommandArguments[COMMAND], "exit") == 0)
+        {
+            mshexit(line->ncommands);
         }
         else
         {
@@ -386,7 +391,7 @@ void executeExternalCommands(tline *line)
  * @param directory The path of the target directory. If NULL, changes to the
  * HOME directory.
  */
-void cd(char *directory)
+void mshcd(char *directory)
 {
     if (directory == NULL)
     {
@@ -396,4 +401,25 @@ void cd(char *directory)
     {
         chdir(directory);
     }
+}
+
+/**
+ * Terminate the program, ensuring that all child processes spawned during its
+ * execution have completed. It iterates over the specified number of commands,
+ * waiting for each child process to finish before exiting the program with a
+ * success status code.
+ *
+ * @param commands The number of commands or child processes spawned during the
+ * execution of the program.
+ */
+void mshexit(int commands)
+{
+    int _;
+
+    for (_ = 0; _ < commands; _++)
+    {
+        wait(NULL);
+    }
+
+    exit(EXIT_SUCCESS);
 }
