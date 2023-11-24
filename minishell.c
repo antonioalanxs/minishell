@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/stat.h>
 
 #include "parser.h"
 
@@ -74,6 +75,25 @@
  */
 #define DIRECTORY 1
 
+/**
+ * Default Unix mask value for file permissions.
+ *
+ * Represent the default Unix mask value for file permissions. It is set to 18
+ * in octal, which corresponds to 022 in decimal.
+ */
+#define DEFAULT_UNIX_MASK 18
+
+/**
+ * Default Unix formatted mask value for file permissions which is used for
+ * display purposes.
+ */
+#define DEFAULT_UNIX_FORMATTED_MASK 22;
+
+/**
+ * Index representing the mask part of an argument array.
+ */
+#define MASK 1
+
 void store(int *stdinfd, int *stdoutfd, int *stderrfd);
 void redirect(tline *line);
 void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO);
@@ -82,12 +102,19 @@ void restore(const int stdinfd, const int stdoutfd, const int stderrfd);
 void executeExternalCommands(tline *line);
 void mshcd(char *directory);
 void mshexit(int commands);
+void mshumask(char *mask, int *formattedMask);
+void printMask(int mask);
+int octal(char *number);
 
 int main(void)
 {
     char buffer[MAXIMUM_LINE_LENGTH];
     tline *line;
     char **firstCommandArguments;
+    int formattedMask;
+
+    formattedMask = DEFAULT_UNIX_FORMATTED_MASK;
+    umask(DEFAULT_UNIX_MASK);
 
     printf(PROMPT);
     while (fgets(buffer, MAXIMUM_LINE_LENGTH, stdin))
@@ -108,6 +135,10 @@ int main(void)
         else if (strcmp(firstCommandArguments[COMMAND], "exit") == 0)
         {
             mshexit(line->ncommands);
+        }
+        else if (strcmp(firstCommandArguments[COMMAND], "umask") == 0)
+        {
+            mshumask(firstCommandArguments[MASK], &formattedMask);
         }
         else
         {
@@ -405,9 +436,7 @@ void mshcd(char *directory)
 
 /**
  * Terminate the program, ensuring that all child processes spawned during its
- * execution have completed. It iterates over the specified number of commands,
- * waiting for each child process to finish before exiting the program with a
- * success status code.
+ * execution have completed.
  *
  * @param commands The number of commands or child processes spawned during the
  * execution of the program.
@@ -422,4 +451,112 @@ void mshexit(int commands)
     }
 
     exit(EXIT_SUCCESS);
+}
+
+/**
+ * Set the umask value based on the provided mask and update the formatted mask.
+ *
+ * @param mask The octal string representing the new umask value.
+ * @param formattedMask Pointer to the variable to store the formatted mask.
+ */
+void mshumask(char *mask, int *formattedMask)
+{
+    int mappedMask;
+
+    if (mask == NULL)
+    {
+        printMask(*formattedMask);
+        return;
+    }
+
+    if (!octal(mask))
+    {
+        fprintf(stderr, "%s: Error. Invalid argument\n", mask);
+        return;
+    }
+
+    sscanf(mask, "%o", &mappedMask);
+    umask(mappedMask);
+
+    *formattedMask = atoi(mask);
+    printMask(*formattedMask);
+}
+
+/**
+ * Prints the octal representation of a file permissions mask.
+ *
+ * This function takes an integer `mask` representing a file permissions mask
+ * and prints its octal representation. It ensures that the printed octal
+ * number always consists of at least four digits by padding with leading zeros
+ * if needed.
+ *
+ * @param mask An integer representing the file permissions mask.
+ *
+ * Example:
+ *   printMask(644);  // Output: 0644
+ *   printMask(7);    // Output: 0007
+ */
+void printMask(int mask)
+{
+    int auxiliarMask;
+    int zeros;
+    int _;
+
+    auxiliarMask = mask;
+    zeros = 4;
+
+    // Calculate the number of leading zeros needed
+    while (auxiliarMask > 0)
+    {
+        auxiliarMask = auxiliarMask / 10;
+        zeros--;
+    }
+
+    // Print leading zeros
+    for (_ = 0; _ < zeros; _++)
+    {
+        printf("0");
+    }
+
+    printf("%i\n", mask);
+}
+
+/**
+ * Check if a given string represents a valid octal number.
+ *
+ * Ensure that the string is not NULL, has a length of at most 4 characters,
+ * and each character represents a valid octal digit (0-7).
+ *
+ * @param number The string to be checked for octal validity.
+ * @return 1 if the string is a valid octal number, 0 otherwise.
+ */
+int octal(char *number)
+{
+    int length;
+    int index;
+    int mappedDigit;
+
+    if (number == NULL)
+    {
+        return 0;
+    }
+
+    length = strlen(number);
+
+    if (length > 4)
+    {
+        return 0;
+    }
+
+    for (index = 0; index < length; index++)
+    {
+        mappedDigit = number[index] - 48;
+
+        if (mappedDigit < 0 || mappedDigit > 7)
+        {
+            return 0;
+        }
+    }
+
+    return 1;
 }
