@@ -59,17 +59,34 @@
  */
 #define PIPE_WRITE 1
 
+/**
+ * Environment variable representing the user's home directory.
+ */
+#define HOME "HOME"
+
+/**
+ * Index representing the command part of an argument array.
+ */
+#define COMMAND 0
+
+/**
+ * Index representing the directory part of an argument array.
+ */
+#define DIRECTORY 1
+
 void store(int *stdinfd, int *stdoutfd, int *stderrfd);
 void redirect(tline *line);
 void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO);
 void run(const tline *line, int number);
 void restore(const int stdinfd, const int stdoutfd, const int stderrfd);
-void executeCommands(tline *line);
+void executeExternalCommands(tline *line);
+void cd(char *directory);
 
 int main(void)
 {
     char buffer[MAXIMUM_LINE_LENGTH];
     tline *line;
+    char **firstCommandArguments;
 
     printf(PROMPT);
     while (fgets(buffer, MAXIMUM_LINE_LENGTH, stdin))
@@ -81,7 +98,16 @@ int main(void)
             continue;
         }
 
-        executeCommands(line);
+        firstCommandArguments = line->commands[0].argv;
+
+        if (strcmp(firstCommandArguments[COMMAND], "cd") == 0)
+        {
+            cd(firstCommandArguments[DIRECTORY]);
+        }
+        else
+        {
+            executeExternalCommands(line);
+        }
 
         printf(PROMPT);
     }
@@ -181,7 +207,7 @@ void run(const tline *line, int number)
     char *command;
 
     arguments = line->commands[number].argv;
-    command = arguments[0];
+    command = arguments[COMMAND];
 
     execvp(command, arguments);
 
@@ -215,14 +241,14 @@ void restore(const int stdinfd, const int stdoutfd, const int stderrfd)
  *
  * Example:
  *   tline *line = tokenize("ls -l | grep .txt | wc -l");
- *   executeCommands(line);
+ *   executeExternalCommands(line);
  *
  * Note:
  *   This function relies on the `parser.h` library and auxiliary functions
  *   like `store`, `redirect`, `run`, `restore`, and assumes the existence of
  *   constants like `PIPE_READ`, `PIPE_WRITE`, or `FORK_CHILD`.
  */
-void executeCommands(tline *line)
+void executeExternalCommands(tline *line)
 {
     int stdinfd, stdoutfd, stderrfd;
     int commands, command;
@@ -348,5 +374,26 @@ void executeCommands(tline *line)
 
         // Finish by cleaning `stdout` and `stdin` again for next iteration
         restore(stdinfd, stdoutfd, stderrfd);
+    }
+}
+
+/**
+ * Changes the current working directory.
+ *
+ * Changes the current working directory to the specified directory. If no
+ * directory is provided (NULL), it changes to the HOME directory.
+ *
+ * @param directory The path of the target directory. If NULL, changes to the
+ * HOME directory.
+ */
+void cd(char *directory)
+{
+    if (directory == NULL)
+    {
+        chdir(getenv(HOME));
+    }
+    else
+    {
+        chdir(directory);
     }
 }
