@@ -94,17 +94,65 @@
  */
 #define MASK 1
 
+/**
+ * Define the maximum number of processes a job can have.
+ */
+#define MAXIMUM_PID_LIST_SIZE 25
+
+/**
+ * Maximum size allowed for the list of active jobs in the shell.
+ */
+#define MAXIMUM_JOB_LIST_SIZE 50
+
+/**
+ * Signal number used for the kill system call to forcefully terminate a
+ * process.
+ */
+#define KILL 9
+
+/**
+ * Structure representing a job in the shell.
+ *
+ * Fields:
+ *   - instruction: The instruction associated with the job.
+ *   - size: The number of processes in the job.
+ *   - pids: Array of process identifiers within the job.
+ *   - finished: Flag indicating whether the job has finished.
+ */
+typedef struct
+{
+    char instruction[MAXIMUM_LINE_LENGTH];
+    int size;
+    pid_t pids[MAXIMUM_PID_LIST_SIZE];
+    int finished;
+} tjob;
+
+/**
+ * Structure representing the list of active jobs in the shell.
+ *
+ * Fields:
+ *   - list: Pointer to the array of `tjob` structures.
+ *   - size: The current size of the list (number of active jobs).
+ */
+typedef struct
+{
+    tjob *list;
+    int size;
+} tjobs;
+
 void store(int *stdinfd, int *stdoutfd, int *stderrfd);
 void redirect(tline *line);
 void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO);
 void run(const tline *line, int number);
 void restore(const int stdinfd, const int stdoutfd, const int stderrfd);
-void executeExternalCommands(tline *line);
+void executeExternalCommands(tline *line, tjobs *jobs, char buffer[]);
 void mshcd(char *directory);
-void mshexit(int commands);
 void mshumask(char *mask, int *formattedMask);
 void printMask(int mask);
 int octal(char *number);
+void mshexit(tjobs *jobs);
+void mshjobs(tjobs *jobs);
+int finished(tjob job);
 
 int main(void)
 {
@@ -112,9 +160,13 @@ int main(void)
     tline *line;
     char **firstCommandArguments;
     int formattedMask;
+    tjobs jobs;
 
     formattedMask = DEFAULT_UNIX_FORMATTED_MASK;
     umask(DEFAULT_UNIX_MASK);
+
+    jobs.list = malloc(sizeof(tjob) * MAXIMUM_JOB_LIST_SIZE);
+    jobs.size = 0;
 
     printf(PROMPT);
     while (fgets(buffer, MAXIMUM_LINE_LENGTH, stdin))
@@ -132,17 +184,21 @@ int main(void)
         {
             mshcd(firstCommandArguments[DIRECTORY]);
         }
-        else if (strcmp(firstCommandArguments[COMMAND], "exit") == 0)
-        {
-            mshexit(line->ncommands);
-        }
         else if (strcmp(firstCommandArguments[COMMAND], "umask") == 0)
         {
             mshumask(firstCommandArguments[MASK], &formattedMask);
         }
+        else if (strcmp(firstCommandArguments[COMMAND], "exit") == 0)
+        {
+            mshexit(&jobs);
+        }
+        else if (strcmp(firstCommandArguments[COMMAND], "jobs") == 0)
+        {
+            mshjobs(&jobs);
+        }
         else
         {
-            executeExternalCommands(line);
+            executeExternalCommands(line, &jobs, buffer);
         }
 
         printf(PROMPT);
@@ -266,36 +322,38 @@ void restore(const int stdinfd, const int stdoutfd, const int stderrfd)
 }
 
 /**
- * Executes a series of commands specified in the given command line structure.
+ * Execute a series of commands specified in the given command line structure.
  *
  * @param line A data structure representing a command line with multiple
  * commands.
+ * @param jobs A pointer to the structure representing the list of active jobs
+ * which could be updated if the command line is executed in background.
+ * @param buffer A buffer where the command line instruction is stored.
  *
- * This function takes a `tline` command line structure as input and executes
- * the commands sequentially ensuring proper communication between consecutive
- * commands, managing the flow of input and output through pipes.
- *
- * Example:
- *   tline *line = tokenize("ls -l | grep .txt | wc -l");
- *   executeExternalCommands(line);
+ * Take a `tline` command line structure as input and executes the commands
+ * sequentially managing the flow of input and output through pipes. Also
+ * updates the `jobs` data structure if the command line is executed in
+ * background.
  *
  * Note:
  *   This function relies on the `parser.h` library and auxiliary functions
  *   like `store`, `redirect`, `run`, `restore`, and assumes the existence of
- *   constants like `PIPE_READ`, `PIPE_WRITE`, or `FORK_CHILD`.
+ *   constants like `PIPE_READ`, `PIPE_WRITE`, etc.
  */
-void executeExternalCommands(tline *line)
+void executeExternalCommands(tline *line, tjobs *jobs, char buffer[])
 {
     int stdinfd, stdoutfd, stderrfd;
     int commands, command;
-    int next, even, last;
+    int next, even, last, background;
     pid_t pid;
     int p[PIPE], p2[PIPE];
+    tjob *currentJob;
 
     store(&stdinfd, &stdoutfd, &stderrfd);
 
     commands = line->ncommands;
     next = commands > 1;
+    background = line->background == 1;
 
     if (next)
     {
@@ -328,7 +386,21 @@ void executeExternalCommands(tline *line)
         // Clears `stdout` and `stdin` in case there are following commands
         restore(stdinfd, stdoutfd, stderrfd);
 
-        wait(NULL);
+        if (background)
+        {
+            currentJob = &jobs->list[jobs->size];
+
+            strcpy(currentJob->instruction, buffer);
+            currentJob->size = commands;
+            currentJob->pids[0] = pid;
+            currentJob->finished = 0;
+
+            jobs->size++;
+        }
+        else
+        {
+            wait(NULL);
+        }
 
         for (command = 1; next && command < commands; command++)
         {
@@ -404,7 +476,14 @@ void executeExternalCommands(tline *line)
                     }
                 }
 
-                wait(NULL);
+                if (background)
+                {
+                    currentJob->pids[command] = pid;
+                }
+                else
+                {
+                    wait(NULL);
+                }
             }
         }
 
@@ -432,25 +511,6 @@ void mshcd(char *directory)
     {
         chdir(directory);
     }
-}
-
-/**
- * Terminate the program, ensuring that all child processes spawned during its
- * execution have completed.
- *
- * @param commands The number of commands or child processes spawned during the
- * execution of the program.
- */
-void mshexit(int commands)
-{
-    int _;
-
-    for (_ = 0; _ < commands; _++)
-    {
-        wait(NULL);
-    }
-
-    exit(EXIT_SUCCESS);
 }
 
 /**
@@ -553,6 +613,112 @@ int octal(char *number)
         mappedDigit = number[index] - 48;
 
         if (mappedDigit < 0 || mappedDigit > 7)
+        {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/**
+ * Terminate all running processes associated with active jobs and exit the
+ * shell.
+ *
+ * Iterates through the list of active jobs, terminates each process within the
+ * job, frees memory associated with the job list and exits the shell.
+ *
+ * @param jobs A pointer to the structure representing the list of active jobs.
+ */
+void mshexit(tjobs *jobs)
+{
+    int j, pid;
+    int jobsSize, jobSize;
+    tjob *job;
+
+    jobsSize = jobs->size;
+
+    for (j = 0; j < jobsSize; j++)
+    {
+        job = &jobs->list[j];
+        jobSize = job->size;
+
+        for (pid = 0; pid < jobSize; pid++)
+        {
+            kill(job->pids[pid], KILL);
+        }
+    }
+
+    free(jobs->list);
+
+    exit(EXIT_SUCCESS);
+}
+
+/**
+ * Display the status of jobs in the provided job list.
+ *
+ * Checks the status of each job in the list and prints whether it is done or
+ * running.
+ *
+ * If a job is done, it prints its completion status and removes it from the
+ * job list.
+ *
+ * @param jobs A pointer to the structure representing the list of active jobs.
+ */
+void mshjobs(tjobs *jobs)
+{
+    int j, index;
+    int jobsSize;
+    tjob *job;
+
+    jobsSize = jobs->size;
+
+    for (j = 0; j < jobsSize; j++)
+    {
+        job = &jobs->list[j];
+
+        if (finished(*job))
+        {
+            printf("[%i] Done\t%s", j + 1, job->instruction);
+
+            // Remove the job from job list
+            for (index = j; index < jobsSize; index++)
+            {
+                jobs->list[index] = jobs->list[index + 1];
+            }
+            jobs->size--;
+        }
+        else
+        {
+            printf("[%i] Running\t%s", j + 1, job->instruction);
+        }
+    }
+}
+
+/**
+ * Check if a job has completed.
+ *
+ * A job is considered finished when all of its commands have completed.
+ *
+ * @param job The structure representing the job.
+ * @return 1 if all commands of the job have finished, 0 otherwise.
+ */
+int finished(tjob job)
+{
+    int index;
+    int jobSize;
+    int pid;
+    int finished;
+
+    jobSize = job.size;
+
+    for (index = 0; index < jobSize; index++)
+    {
+        pid = job.pids[index];
+
+        finished = waitpid(pid, NULL, WNOHANG) == pid;
+
+        if (!finished)
         {
             return 0;
         }
