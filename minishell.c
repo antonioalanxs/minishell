@@ -111,6 +111,11 @@
 #define KILL 9
 
 /**
+ * Index representing the job part of an argument array.
+ */
+#define JOB 1
+
+/**
  * Structure representing a job in the shell.
  *
  * Fields:
@@ -153,6 +158,8 @@ int octal(char *number);
 void mshexit(tjobs *jobs);
 void mshjobs(tjobs *jobs);
 int finished(tjob job);
+void mshfg(char *job, tjobs *jobs);
+void delete(int job, tjobs *jobs);
 
 int main(void)
 {
@@ -195,6 +202,10 @@ int main(void)
         else if (strcmp(firstCommandArguments[COMMAND], "jobs") == 0)
         {
             mshjobs(&jobs);
+        }
+        else if (strcmp(firstCommandArguments[COMMAND], "fg") == 0)
+        {
+            mshfg(firstCommandArguments[JOB], &jobs);
         }
         else
         {
@@ -396,6 +407,11 @@ void executeExternalCommands(tline *line, tjobs *jobs, char buffer[])
             currentJob->finished = 0;
 
             jobs->size++;
+
+            if (!next)
+            {
+                printf("[%i] %i\n", jobs->size, pid);
+            }
         }
         else
         {
@@ -479,6 +495,11 @@ void executeExternalCommands(tline *line, tjobs *jobs, char buffer[])
                 if (background)
                 {
                     currentJob->pids[command] = pid;
+
+                    if (last)
+                    {
+                        printf("[%i] %i\n", jobs->size, pid);
+                    }
                 }
                 else
                 {
@@ -667,7 +688,7 @@ void mshexit(tjobs *jobs)
  */
 void mshjobs(tjobs *jobs)
 {
-    int j, index;
+    int j;
     int jobsSize;
     tjob *job;
 
@@ -681,12 +702,7 @@ void mshjobs(tjobs *jobs)
         {
             printf("[%i] Done\t%s", j + 1, job->instruction);
 
-            // Remove the job from job list
-            for (index = j; index < jobsSize; index++)
-            {
-                jobs->list[index] = jobs->list[index + 1];
-            }
-            jobs->size--;
+            delete (j, jobs);
         }
         else
         {
@@ -725,4 +741,89 @@ int finished(tjob job)
     }
 
     return 1;
+}
+
+/**
+ * Execute the specified job in the foreground, waiting for its completion.
+ *
+ * Take a job identifier and a pointer to a structure containing currently
+ * running jobs. It brings the specified job to the foreground, waits for its
+ * completion, and then updates the job information.
+ *
+ * If the specified job identifier is invalid or the job has already terminated,
+ * appropriate error messages are displayed.
+ *
+ * @param job A string representing the job identifier or number to be brought
+ * to the foreground.
+ * @param jobs A pointer to the structure representing the list of active jobs.
+ */
+
+void mshfg(char *job, tjobs *jobs)
+{
+    int mappedJob;
+    tjob ranJob;
+    int jobSize;
+    int index;
+
+    if (job == NULL)
+    {
+        fprintf(stderr, "fg: Error. Enter a job\n");
+        printf("Usage: fg [job_spec]\n");
+        return;
+    }
+
+    if (jobs->size == 0)
+    {
+        printf("fg: there are no jobs available\n");
+        return;
+    }
+
+    mappedJob = atoi(job) - 1;
+
+    if (!(mappedJob > 0 || mappedJob <= jobs->size - 1))
+    {
+        fprintf(stderr, "fg: Error. No such job\n");
+        return;
+    }
+
+    ranJob = jobs->list[mappedJob];
+
+    if (finished(ranJob))
+    {
+        printf("fg: job has terminated\n");
+        printf("[%s] Done\t%s\n", job, ranJob.instruction);
+    }
+    else
+    {
+        printf("%s", ranJob.instruction);
+
+        jobSize = ranJob.size;
+
+        for (index = 0; index < jobSize; index++)
+        {
+            waitpid(ranJob.pids[index], NULL, 0);
+        }
+    }
+
+    delete (mappedJob, jobs);
+}
+
+/**
+ * Delete a inactive job from a list of active jobs.
+ *
+ * @param job Inactive job that will be removed from active jobs list.
+ * @param jobs A pointer to the structure representing the list of active jobs.
+ */
+void delete(int job, tjobs *jobs)
+{
+    int index, jobsSize;
+
+    jobsSize = jobs->size;
+
+    for (index = job; index < jobsSize; index++)
+    {
+        jobs->list[index] = jobs->list[index + 1];
+    }
+
+    jobs->size--;
 }
