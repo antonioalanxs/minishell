@@ -145,21 +145,22 @@ typedef struct
     int size;
 } tjobs;
 
+int enter(const char buffer[], const tline *line);
 void store(int *stdinfd, int *stdoutfd, int *stderrfd);
-void redirect(tline *line);
+void redirect(const tline *line);
 void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO);
-void run(const tline *line, int number);
+void run(const tline *line, const int number);
 void restore(const int stdinfd, const int stdoutfd, const int stderrfd);
-void executeExternalCommands(tline *line, tjobs *jobs, char buffer[]);
-void mshcd(char *directory);
-void mshumask(char *mask, int *formattedMask);
-void printMask(int mask);
-int octal(char *number);
+void executeExternalCommands(const tline *line, tjobs *jobs, const char buffer[]);
+void mshcd(const char *directory);
+void mshumask(const char *mask, int *formattedMask);
+void printMask(const int mask);
+int octal(const char *number);
 void mshexit(tjobs *jobs);
 void mshjobs(tjobs *jobs);
-int finished(tjob job);
-void mshfg(char *job, tjobs *jobs);
-void delete(int job, tjobs *jobs);
+int finished(const tjob job);
+void mshfg(const char *job, tjobs *jobs);
+void delete(const int job, tjobs *jobs);
 
 int main(void)
 {
@@ -180,8 +181,9 @@ int main(void)
     {
         line = tokenize(buffer);
 
-        if (line == NULL)
+        if (enter(buffer, line))
         {
+            printf(PROMPT);
             continue;
         }
 
@@ -219,6 +221,19 @@ int main(void)
 }
 
 /**
+ * Check if the user input represents an Enter key pressed.
+ *
+ * @param buffer Input buffer representing the user's input.
+ * @param line Pointer to a `tline` structure containing tokenized information.
+ * 
+ * @return 1 if Enter key pressed, otherwise 0.
+ */
+int enter(const char buffer[], const tline *line)
+{
+    return strcmp(buffer, "\n") == 0 || line == NULL;
+}
+
+/**
  * Store the standard input, output, and error file descriptors for later
  * restoration.
  *
@@ -248,7 +263,7 @@ void store(int *stdinfd, int *stdoutfd, int *stderrfd)
  * @param stderrfd Pointer to the variable to store the original standard error
  * file descriptor.
  */
-void redirect(tline *line)
+void redirect(const tline *line)
 {
     if (line->redirect_error != NULL)
     {
@@ -304,7 +319,7 @@ void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO)
  * If the command execution fails, an error message is printed to `stderr`
  * indicating that was not found, and the program exits with a failure status.
  */
-void run(const tline *line, int number)
+void run(const tline *line, const int number)
 {
     char **arguments;
     char *command;
@@ -351,7 +366,7 @@ void restore(const int stdinfd, const int stdoutfd, const int stderrfd)
  *   like `store`, `redirect`, `run`, `restore`, and assumes the existence of
  *   constants like `PIPE_READ`, `PIPE_WRITE`, etc.
  */
-void executeExternalCommands(tline *line, tjobs *jobs, char buffer[])
+void executeExternalCommands(const tline *line, tjobs *jobs, const char buffer[])
 {
     int stdinfd, stdoutfd, stderrfd;
     int commands, command;
@@ -522,7 +537,7 @@ void executeExternalCommands(tline *line, tjobs *jobs, char buffer[])
  * @param directory The path of the target directory. If NULL, changes to the
  * HOME directory.
  */
-void mshcd(char *directory)
+void mshcd(const char *directory)
 {
     if (directory == NULL)
     {
@@ -540,7 +555,7 @@ void mshcd(char *directory)
  * @param mask The octal string representing the new umask value.
  * @param formattedMask Pointer to the variable to store the formatted mask.
  */
-void mshumask(char *mask, int *formattedMask)
+void mshumask(const char *mask, int *formattedMask)
 {
     int mappedMask;
 
@@ -577,7 +592,7 @@ void mshumask(char *mask, int *formattedMask)
  *   printMask(644);  // Output: 0644
  *   printMask(7);    // Output: 0007
  */
-void printMask(int mask)
+void printMask(const int mask)
 {
     int auxiliarMask;
     int zeros;
@@ -611,7 +626,7 @@ void printMask(int mask)
  * @param number The string to be checked for octal validity.
  * @return 1 if the string is a valid octal number, 0 otherwise.
  */
-int octal(char *number)
+int octal(const char *number)
 {
     int length;
     int index;
@@ -719,7 +734,7 @@ void mshjobs(tjobs *jobs)
  * @param job The structure representing the job.
  * @return 1 if all commands of the job have finished, 0 otherwise.
  */
-int finished(tjob job)
+int finished(const tjob job)
 {
     int index;
     int jobSize;
@@ -758,7 +773,7 @@ int finished(tjob job)
  * @param jobs A pointer to the structure representing the list of active jobs.
  */
 
-void mshfg(char *job, tjobs *jobs)
+void mshfg(const char *job, tjobs *jobs)
 {
     int mappedJob;
     tjob ranJob;
@@ -814,7 +829,7 @@ void mshfg(char *job, tjobs *jobs)
  * @param job Inactive job that will be removed from active jobs list.
  * @param jobs A pointer to the structure representing the list of active jobs.
  */
-void delete(int job, tjobs *jobs)
+void delete(const int job, tjobs *jobs)
 {
     int index, jobsSize;
 
