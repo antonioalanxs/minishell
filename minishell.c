@@ -116,6 +116,17 @@
 #define JOB 1
 
 /**
+ * Wait for the specified child process. It is used as the options
+ * argument in the `waitpid` function.
+ *
+ * Example usage:
+ * ```c
+ * waitpid(pid, NULL, WAIT);
+ * ```
+ */
+#define WAIT 0
+
+/**
  * Structure representing a job in the shell.
  *
  * Fields:
@@ -791,14 +802,14 @@ void mshfg(const char *job, tjobs *jobs)
 
     if (job == NULL)
     {
-        fprintf(stderr, "fg: Error. Enter a job\n");
-        printf("Usage: fg [job_spec]\n");
+        fprintf(stderr, "fg: Error. Enter a job");
+        printf("Usage: fg [job_spec]");
         return;
     }
 
     if (jobs->size == 0)
     {
-        printf("fg: There are no jobs available\n");
+        printf("fg: There are no jobs available");
         return;
     }
 
@@ -806,7 +817,7 @@ void mshfg(const char *job, tjobs *jobs)
 
     if (!(mappedJob > 0 || mappedJob <= jobs->size - 1))
     {
-        fprintf(stderr, "fg: Error. No such job\n");
+        fprintf(stderr, "fg: Error. No such job");
         return;
     }
 
@@ -814,8 +825,8 @@ void mshfg(const char *job, tjobs *jobs)
 
     if (finished(ranJob))
     {
-        printf("fg: job has terminated\n");
-        printf("[%s] Done\t%s\n", job, ranJob.instruction);
+        printf("fg: job has terminated");
+        printf("[%s] Done\t%s", job, ranJob.instruction);
     }
     else
     {
@@ -825,7 +836,7 @@ void mshfg(const char *job, tjobs *jobs)
 
         for (index = 0; index < jobSize; index++)
         {
-            waitpid(ranJob.pids[index], NULL, 0);
+            waitpid(ranJob.pids[index], NULL, WAIT);
         }
     }
 
