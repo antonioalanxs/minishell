@@ -161,6 +161,7 @@ void mshjobs(tjobs *jobs);
 int finished(const tjob job);
 void mshfg(const char *job, tjobs *jobs);
 void delete(const int job, tjobs *jobs);
+void ctrlc();
 
 int main(void)
 {
@@ -175,6 +176,8 @@ int main(void)
 
     jobs.list = malloc(sizeof(tjob) * MAXIMUM_JOB_LIST_SIZE);
     jobs.size = 0;
+
+    signal(SIGINT, ctrlc);
 
     printf(PROMPT);
     while (fgets(buffer, MAXIMUM_LINE_LENGTH, stdin))
@@ -225,7 +228,7 @@ int main(void)
  *
  * @param buffer Input buffer representing the user's input.
  * @param line Pointer to a `tline` structure containing tokenized information.
- * 
+ *
  * @return 1 if Enter key pressed, otherwise 0.
  */
 int enter(const char buffer[], const tline *line)
@@ -374,6 +377,8 @@ void executeExternalCommands(const tline *line, tjobs *jobs, const char buffer[]
     pid_t pid;
     int p[PIPE], p2[PIPE];
     tjob *currentJob;
+
+    signal(SIGINT, SIG_IGN);
 
     store(&stdinfd, &stdoutfd, &stderrfd);
 
@@ -526,6 +531,8 @@ void executeExternalCommands(const tline *line, tjobs *jobs, const char buffer[]
         // Finish by cleaning `stdout` and `stdin` again for next iteration
         restore(stdinfd, stdoutfd, stderrfd);
     }
+
+    signal(SIGINT, ctrlc);
 }
 
 /**
@@ -780,6 +787,8 @@ void mshfg(const char *job, tjobs *jobs)
     int jobSize;
     int index;
 
+    signal(SIGINT, SIG_IGN);
+
     if (job == NULL)
     {
         fprintf(stderr, "fg: Error. Enter a job\n");
@@ -789,7 +798,7 @@ void mshfg(const char *job, tjobs *jobs)
 
     if (jobs->size == 0)
     {
-        printf("fg: there are no jobs available\n");
+        printf("fg: There are no jobs available\n");
         return;
     }
 
@@ -821,6 +830,8 @@ void mshfg(const char *job, tjobs *jobs)
     }
 
     delete (mappedJob, jobs);
+
+    signal(SIGINT, ctrlc);
 }
 
 /**
@@ -841,4 +852,17 @@ void delete(const int job, tjobs *jobs)
     }
 
     jobs->size--;
+}
+
+/**
+ * Signal handler for the `Ctrl+C` signal (`SIGINT`).
+ *
+ * When `Ctrl+C` is pressed, it prints a newline character to move to a new
+ * line, displays the shell prompt, and flushes the standard output.
+ */
+void ctrlc()
+{
+    printf("\n");
+    printf(PROMPT);
+    fflush(stdout);
 }
