@@ -55,7 +55,7 @@ The minishell is now running. To exit the shell, simply execute the `exit` comma
 
 ### Command Execution
 
-minishell can execute external commands and handle command piping, allowing users to chain commands together using the `|` character.
+`minishell` can execute external commands and handle command piping, allowing users to chain commands together using the `|` character.
 
 ```shell
 msh> ls | grep lib | wc -l
