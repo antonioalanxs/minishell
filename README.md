@@ -23,7 +23,7 @@
 
 ## Overview
 
-Simple shell program designed to interpret and execute commands entered by the user. It supports the execution of external commands, input and output redirection, command piping, background execution, and various internal commands such as `cd`, `umask`, `exit`, `jobs`, and `fg`.
+Reduced version of a real shell. It supports the execution of external commands, input and output redirection, command piping, background execution, and various internal commands such as `cd`, `umask`, `exit`, `jobs`, and `fg`.
 
 ## Installation
 
