@@ -172,6 +172,7 @@ int finished(tjob *job);
 void mshfg(const char *job, tjobs *jobs);
 void delete(const int job, tjobs *jobs);
 void ctrlc();
+void ctrlc2();
 
 int main(void)
 {
@@ -375,7 +376,7 @@ void executeExternalCommands(const tline *line, tjobs *jobs, const char buffer[]
     int p[PIPE], p2[PIPE];
     tjob *currentJob;
 
-    signal(SIGINT, SIG_IGN);
+    signal(SIGINT, ctrlc2);
 
     store(&stdinfd, &stdoutfd, &stderrfd);
 
@@ -524,7 +525,7 @@ void executeExternalCommands(const tline *line, tjobs *jobs, const char buffer[]
                 }
             }
         }
-
+        
         // Finish by cleaning `stdout` and `stdin` again for next iteration
         restore(stdinfd, stdoutfd, stderrfd);
     }
@@ -877,4 +878,15 @@ void ctrlc()
     printf("\n");
     printf(PROMPT);
     fflush(stdout);
+}
+
+/**
+ * Signal handler for the `Ctrl+C` signal (`SIGINT`).
+ *
+ * When `Ctrl+C` is pressed, it prints a newline character to move to a new
+ * line.
+ */
+void ctrlc2()
+{
+    printf("\n");
 }
