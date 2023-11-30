@@ -749,7 +749,7 @@ void mshjobs(tjobs *jobs)
 
     for (j = 0; j < finishedJobsSize; j++)
     {
-        delete(finishedJobs[j], jobs);
+        delete (finishedJobs[j], jobs);
     }
 }
 
@@ -814,34 +814,33 @@ void mshfg(const char *job, tjobs *jobs)
     int jobSize;
     int index;
 
-    signal(SIGINT, SIG_IGN);
-
     if (job == NULL)
     {
-        fprintf(stderr, "fg: Error. Enter a job");
-        printf("Usage: fg [job_spec]");
+        mshfg("1", jobs);
         return;
     }
 
     if (jobs->size == 0)
     {
-        printf("fg: There are no jobs available");
+        printf("fg: There are no jobs available\n");
         return;
     }
 
     mappedJob = atoi(job) - 1;
 
-    if (!(mappedJob > 0 || mappedJob <= jobs->size - 1))
+    if (mappedJob < 0 || mappedJob > jobs->size - 1)
     {
-        fprintf(stderr, "fg: Error. No such job");
+        fprintf(stderr, "fg: Error. No such job\n");
         return;
     }
+
+    signal(SIGINT, SIG_IGN);
 
     ranJob = &jobs->list[mappedJob];
 
     if (finished(ranJob))
     {
-        printf("fg: job has terminated");
+        printf("fg: job has terminated\n");
         printf("[%s] Done\t%s", job, ranJob->instruction);
     }
     else
