@@ -169,7 +169,7 @@ void printMask(const int mask);
 int octal(const char *number);
 void mshexit(tjobs *jobs);
 void mshjobs(tjobs *jobs);
-int finished(const tjob job);
+int finished(tjob *job);
 void mshfg(const char *job, tjobs *jobs);
 void delete(const int job, tjobs *jobs);
 void ctrlc();
@@ -437,7 +437,7 @@ void executeExternalCommands(const tline *line, tjobs *jobs, const char buffer[]
             currentJob->pids[0] = pid;
             currentJob->finished = 0;
 
-            jobs->size++;
+            jobs->size = (jobs->size + 1) % MAXIMUM_JOB_LIST_SIZE;
 
             if (!next)
             {
@@ -714,16 +714,17 @@ void mshexit(tjobs *jobs)
  * Checks the status of each job in the list and prints whether it is done or
  * running.
  *
- * If a job is done, it prints its completion status and removes it from the
- * job list.
+ * If a job is done, it prints its completion status and saves it in
+ * `finishedJobs` local variable to remove it later.
  *
  * @param jobs A pointer to the structure representing the list of active jobs.
  */
 void mshjobs(tjobs *jobs)
 {
-    int j;
-    int jobsSize;
+    int j, jobsSize, formattedJ;
     tjob *job;
+    int finishedJobs[MAXIMUM_JOB_LIST_SIZE];
+    int finishedJobsSize = 0;
 
     jobsSize = jobs->size;
 
@@ -731,16 +732,24 @@ void mshjobs(tjobs *jobs)
     {
         job = &jobs->list[j];
 
-        if (finished(*job))
-        {
-            printf("[%i] Done\t%s", j + 1, job->instruction);
+        formattedJ = j + 1;
 
-            delete (j, jobs);
+        if (finished(job))
+        {
+            printf("[%i] Done\t%s", formattedJ, job->instruction);
+
+            finishedJobs[finishedJobsSize] = j;
+            finishedJobsSize = (finishedJobsSize + 1) % MAXIMUM_JOB_LIST_SIZE;
         }
         else
         {
-            printf("[%i] Running\t%s", j + 1, job->instruction);
+            printf("[%i] Running\t%s", formattedJ, job->instruction);
         }
+    }
+
+    for (j = 0; j < finishedJobsSize; j++)
+    {
+        delete(finishedJobs[j], jobs);
     }
 }
 
@@ -752,18 +761,23 @@ void mshjobs(tjobs *jobs)
  * @param job The structure representing the job.
  * @return 1 if all commands of the job have finished, 0 otherwise.
  */
-int finished(const tjob job)
+int finished(tjob *job)
 {
     int index;
     int jobSize;
     int pid;
     int finished;
 
-    jobSize = job.size;
+    if (job->finished == 1)
+    {
+        return 1;
+    }
+
+    jobSize = job->size;
 
     for (index = 0; index < jobSize; index++)
     {
-        pid = job.pids[index];
+        pid = job->pids[index];
 
         finished = waitpid(pid, NULL, WNOHANG) == pid;
 
@@ -772,6 +786,8 @@ int finished(const tjob job)
             return 0;
         }
     }
+
+    job->finished = 1;
 
     return 1;
 }
@@ -794,7 +810,7 @@ int finished(const tjob job)
 void mshfg(const char *job, tjobs *jobs)
 {
     int mappedJob;
-    tjob ranJob;
+    tjob *ranJob;
     int jobSize;
     int index;
 
@@ -821,22 +837,22 @@ void mshfg(const char *job, tjobs *jobs)
         return;
     }
 
-    ranJob = jobs->list[mappedJob];
+    ranJob = &jobs->list[mappedJob];
 
     if (finished(ranJob))
     {
         printf("fg: job has terminated");
-        printf("[%s] Done\t%s", job, ranJob.instruction);
+        printf("[%s] Done\t%s", job, ranJob->instruction);
     }
     else
     {
-        printf("%s", ranJob.instruction);
+        printf("%s", ranJob->instruction);
 
-        jobSize = ranJob.size;
+        jobSize = ranJob->size;
 
         for (index = 0; index < jobSize; index++)
         {
-            waitpid(ranJob.pids[index], NULL, WAIT);
+            waitpid(ranJob->pids[index], NULL, WAIT);
         }
     }
 
@@ -862,7 +878,7 @@ void delete(const int job, tjobs *jobs)
         jobs->list[index] = jobs->list[index + 1];
     }
 
-    jobs->size--;
+    jobs->size = (jobs->size - 1) % MAXIMUM_JOB_LIST_SIZE;
 }
 
 /**
