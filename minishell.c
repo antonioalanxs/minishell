@@ -156,7 +156,6 @@ typedef struct
     int size;
 } tjobs;
 
-int enter(const char buffer[], const tline *line);
 void store(int *stdinfd, int *stdoutfd, int *stderrfd);
 void redirect(const tline *line);
 void auxiliarRedirect(char *filename, const char *MODE, const int STD_FILENO);
@@ -195,7 +194,7 @@ int main(void)
     {
         line = tokenize(buffer);
 
-        if (enter(buffer, line))
+        if (line == NULL || line->ncommands < 1)
         {
             printf(PROMPT);
             continue;
@@ -232,19 +231,6 @@ int main(void)
     }
 
     return 0;
-}
-
-/**
- * Check if the user input represents an Enter key pressed.
- *
- * @param buffer Input buffer representing the user's input.
- * @param line Pointer to a `tline` structure containing tokenized information.
- *
- * @return 1 if Enter key pressed, otherwise 0.
- */
-int enter(const char buffer[], const tline *line)
-{
-    return strcmp(buffer, "\n") == 0 || line == NULL;
 }
 
 /**
