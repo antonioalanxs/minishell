@@ -4,9 +4,6 @@
 
 1. [Overview](#overview)
 2. [Installation](#installation)
-   - [Prerequisites](#prerequisites)
-   - [Cloning the Repository](#cloning-the-repository)
-   - [Usage](#usage)
 3. [Features](#features)
    - [Command Execution](#command-execution)
    - [Input and Output Redirection](#input-and-output-redirection)
