@@ -18,8 +18,13 @@
      - [`jobs`](#jobs-command)
      - [`fg`](#fg-command)
    - [Signal Handling](#signal-handling)
-4. [Acknowledgments](#acknowledgments)
-5. [License](#license)
+4. [Code Design](#code-design)
+   - [Execution Strategy and Pipeline Management](#execution-strategy-and-pipeline-management)
+   - [Background Implementation](#background-implementation)
+   - [`jobs` and `fg` Commands](#jobs-and-fg-commands)
+   - [Signal Handling Implementation](#signal-handling-implementation)
+5. [Acknowledgments](#acknowledgments)
+6. [License](#license)
 
 ## Overview
 
@@ -143,6 +148,48 @@ sleep 30 &
 ### Signal Handling
 
 Handles the `SIGNINT` (Ctrl-C) signal gracefully, ensuring that pressing it does not close the shell. If a command is running in the foreground, pressing Ctrl-C cancels its execution.
+
+## Code Design
+
+### Execution Strategy and Pipeline Management
+
+The execution and pipeline management follow distinct approaches for different scenarios:
+
+* **Single command execution**: The parent process forks, letting its child execute the command, and waits for it.
+
+* **Execution of two commands**: The parent process performs the first fork, allowing the first child to execute the first command and waiting for it. After the first child finishes, it performs a second fork, waiting for the second child to execute the second command. If the two commands need to communicate, a pipeline is used.
+
+* **Execution of more than two commands**: A two-pipeline system is employed, where depending on the command's position (even or odd), it reads from one pipe and writes to another. Two pipes, `p` and `p2`, are utilized. If the command is odd, it reads from `p` and writes to `p2`. If the command is even, it reads from `p2` and writes to `p`. The first command reads from standard input/its redirection, and the last command writes to standard output/its redirection. The parent process waits for each child to execute its corresponding command before invoking the next child.
+
+### Background Implementation
+
+Background execution is achieved without resorting to the conventional use of the `waitpid` command. This decision is made to allow users to continue using the minishell without waiting for the completion of running processes. Instead, processes will run continuously in the background.
+
+When the user enters any instruction, a `waitpid` is performed with the `WHOHANG` flag to check if the processes have concluded or are still running. This approach enables smooth interaction with the `minishell`, as it does not pause to wait for the completion of background processes.
+
+### `jobs` and `fg` Commands
+
+The system maintains an array of jobs, each containing the user's command line, an array of process IDs (PIDs), and a boolean variable indicating whether the job has finished (all child processes have terminated). The array has a maximum capacity of 25 jobs, and each job can hold up to 50 PIDs.
+
+#### `jobs`
+
+The `jobs` command checks the status of each job using the `finished` function and displays the results. If a job has finished, its index is saved in an array of finished job indices for subsequent removal from the active jobs array.
+
+#### `fg`
+
+* **Without job number**: If no job number is specified, the `fg` command uses a restrictive `waitpid`, actively waiting for all child processes associated with the first job in the active jobs array to finish.
+
+* **With job number**: If a job number is provided, the same action is performed for the job at the specified position in the array. When the job completes, it is removed from the active jobs array.
+
+### Signal Handling Implementation
+
+The signal handling implementation distinguishes the following cases:
+
+* **Nothing is running in the foreground**: The signal is reprogrammed to display the prompt again.
+
+* **Something is running in the foreground**: Default signal behavior. It terminates the ongoing execution and displays the prompt again.
+
+* **Something is running in the background**: The signal is ignored.
 
 ## Acknowledgments
 
